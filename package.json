@@ -1,16 +1,16 @@
 {
-  "name": "runscopemaintenance",
+  "name": "runscopestagingscheduler",
   "version": "1.0.0",
   "description": "",
-  "main": "runscopeMaintenance.js",
+  "main": "index.js",
   "scripts": {
     "test": "echo \"Error: no test specified\" && exit 1"
   },
   "author": "sra",
-  "repository" :
-    { "type" : "git",
-      "url" : "https://github.com/samaybar/runscopeMaintenance.git"
-    },
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/samaybar/runscopeStagingScheduler.git"
+  },
   "license": "ISC",
   "dependencies": {
     "axios": "^0.17.1",
