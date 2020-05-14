@@ -75,7 +75,7 @@ async function copyTestSchedules() {
             log.info(`Getting bucket ${bucket_key}`)
 
             //get list of tests for this bucket
-            const testList = `${baseUrl}/buckets/${bucket_key}/tests?count=100`;
+            const testList = `${baseUrl}/buckets/${bucket_key}/tests?count=500`;
             const results = await getRunscope(testList);
             log.debug(`This is the status code: ${results.status}`);
 
