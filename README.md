@@ -34,7 +34,7 @@ Rename `mysettings.js` as `settings.js`
 - by default, this will just copy the schedules to staging.
 - if you want to delete production schedules, set value on line 12 of index.js to `false` -- this will delete schedules for all tests in the bucket specified
 - if you want to ONLY delete production schedules (and not copy anything to staging), you can run `node index.js delete YOUR_BUCKET_KEY`
-- **IMPORTANT WARNING** `delete` command will delete production tests. to be safe run `copy` in 
+- **IMPORTANT WARNING** `delete` command will delete production tests. to be safe run `copy` o`backup` first
 - a file named `restore-YOUR_BUCKET_KEY-DATESTAMP.json` will be created for use in case you need to copy schedules back to production (see below for use)
 - **IMPORTANT WARNING**: in the unlikely event you have the same test running at two different intervals with the same environment only one instance will be restored. You wil need to restore the other instance through the UI
 
