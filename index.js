@@ -9,7 +9,9 @@ const settings = require('./settings.js');
 let { apikey, buckets, altUrl, restoreFileNames } = settings;
 const apiUrl = "https://api.runscope.com";
 
-const importOnlyMode = true; //true to leave production schedules untouched (false will delete production schedules)
+let importOnlyMode = true; //true to leave production schedules untouched (false will delete production schedules)
+const amendSchedules = true; //true to amend schedules to run less frequently in staging
+let skipStaging = false; //set this to true to not write anything to staging -- if true NO tests will be written to staging, so if importOnlyMode is false all schedules in production will be deleted and nothing will be written to staging
 
 //array to store scheduled tests
 let testSchedules = [];
@@ -20,8 +22,8 @@ let restoreData = [];
 
 var args = process.argv.slice(2);
 log.debug(args[0]);
-if (!((args[0] === 'copy') || (args[0] === 'restore'))) {
-    throw new Error('FAIL: You must indicate "copy" or "restore"');
+if (!((args[0] === 'copy') || (args[0] === 'delete') || (args[0] === 'backup') || (args[0] === 'restore'))) {
+    throw new Error('FAIL: You must indicate "copy", "delete" or "restore"');
 }
 
 let operation = args[0];
@@ -44,6 +46,24 @@ if (operation === 'copy') {
 
     }
     log.debug(buckets);
+    copyTestSchedules();
+} else if (operation === 'backup') {
+    if (args.length > 1) {
+        buckets = args.slice(1)
+
+    }
+    log.debug(buckets);
+    skipStaging = true;
+    importOnlyMode = true;
+    copyTestSchedules();
+} else if (operation === 'delete') {
+    if (args.length > 1) {
+        buckets = args.slice(1)
+
+    }
+    log.debug(buckets);
+    skipStaging = true;
+    importOnlyMode = false;
     copyTestSchedules();
 } else if (operation === 'restore') {
     if (!args[1]) {
@@ -73,8 +93,7 @@ async function copyTestSchedules() {
         for (let i = 0; i < buckets.length; i++) {
             let bucket_key = buckets[i];
             log.info(`Getting bucket ${bucket_key}`)
-
-            //get list of tests for this bucket
+          
             const testList = `${baseUrl}/buckets/${bucket_key}/tests?count=500`;
             const results = await getRunscope(testList);
             log.debug(`This is the status code: ${results.status}`);
@@ -98,12 +117,22 @@ async function copyTestSchedules() {
                     //array of test schedules
                     testSchedules.push(thisScheduleData);
                     //log.debug(JSON.stringify(thisScheduleData,undefined,4));
+
+                    // //write this test to safety file
+                    // safetyData = JSON.stringify(thisScheduleData, undefined, 4)
+                    // //writeToFile(safetyData, safetyFileName);
+                    // if (j + 1 == thisBatch.length){
+                    //     safetyData += '\n]'
+                    // } else {
+                    //     safetyData += ',\n'
+                    // }
+                    // writeToFile(safetyData, safetyFileName);
                 }
             }
 
             log.debug(JSON.stringify(testSchedules, undefined, 4));
             let jsonWriteData = JSON.stringify(testSchedules, undefined, 4);
-            let jsonFileName = `${bucket_key}-${moment().format("YYYYMMDDHmmss")}.json`;
+            let jsonFileName = `orig-${bucket_key}-${moment().format("YYYYMMDDHmmss")}.json`;
             writeToFile(jsonWriteData, jsonFileName);
 
             log.debug("going to write tasks to delete");
@@ -132,12 +161,39 @@ async function copyTestSchedules() {
                         "note": thisTestSched.schedule[schedCount].note
                     };
                     taskList.push(deleteUrl);
-                    //deleteRunscopeSchedule
+                    
+                    
+                    //delete runscope schedules if not in importOnlyMode
                     if (!importOnlyMode) {
                         const deleteResult = await deleteRunscopeSchedule(deleteUrl);
-                        thisRestore.originalScheduleStatus = deleteResult.status;
+                        thisRestore.originalScheduleStatus = `Deleted test - returned ${deleteResult.status} statuscode`;
                     } else {
-                        thisRestore.originalScheduleStatus = "copied to GCP Staging"
+                        if(!skipStaging) {
+                            thisRestore.originalScheduleStatus = "copied to GCP Staging"
+                        } else {
+                            thisRestore.originalScheduleStatus = "backup only - nothing written to staging"
+                        }
+                    }
+                    
+                    //make tests less frequent if amendSchedules option selected
+                    if(amendSchedules){
+                        if (thisRestore.data.interval === '1m') {
+                            thisRestore.newInterval = '5m'
+                        } else if (thisRestore.data.interval === '5m') {
+                            thisRestore.newInterval = '5m'
+                        } else if (thisRestore.data.interval === '15m') {
+                            thisRestore.newInterval = '15m'
+                        } else if (thisRestore.data.interval === '30m') {
+                            thisRestore.newInterval = '1h'
+                        } else if (thisRestore.data.interval === '1h') {
+                            thisRestore.newInterval = 'not scheduled'
+                        } else if (thisRestore.data.interval === '6h') {
+                            thisRestore.newInterval = 'not scheduled'
+                        } else if (thisRestore.data.interval === '1d') {
+                            thisRestore.newInterval = 'not scheduled'
+                        }
+                    } else {
+                        thisRestore.newInterval = thisRestore.data.interval
                     }
                     restoreData.push(thisRestore);
                 }
@@ -147,8 +203,11 @@ async function copyTestSchedules() {
             jsonWriteData = JSON.stringify(restoreData, undefined, 4);            
             jsonFileName = `restore-${bucket_key}-${moment().format("YYYYMMDDHmmss")}.json`;
             writeToFile(jsonWriteData, jsonFileName);
-            //write test schedules to Staging Environment
-            scheduleStagingTests(restoreData);
+            
+            //write test schedules to Staging Environment as long as not in skipStaging mode
+            if(!skipStaging){
+                scheduleStagingTests(restoreData);
+            }
 
         }
     } catch (e) {
@@ -163,14 +222,32 @@ async function scheduleStagingTests(productionSchedule) {
         var myRestoreData = productionSchedule;
         for (let j = 0; j < myRestoreData.length; j++) {
             let thisUrl = myRestoreData[j].url.replace(/https:\/\/api/g, 'https://stageapi')
+            let checkTestUrl = thisUrl.replace(/\/schedules/g,'')
+            log.debug(checkTestUrl);
             log.debug(thisUrl);
-            let thisTest = `test: ${myRestoreData[j].data.test_id} environment: ${myRestoreData[j].data.environment_id} freq: ${myRestoreData[j].data.interval}`;
-            let thisData = myRestoreData[j].data
-            const createResults = await writeRunscopeSchedule(thisUrl, thisData)
-            if (createResults.status == 201) {
-                log.info(`Success! Scheduled on GCP: ${thisTest}`);
-            } else {
-                log.warn(`There was a problem with ${thisTest}`);
+            try {
+                const checkTest = await getRunscope(checkTestUrl);
+                if (checkTest.status == 200) {
+                    if(myRestoreData[j].newInterval != "not scheduled"){
+                        let oldInterval = myRestoreData[j].data.interval
+                        myRestoreData[j].data.interval = myRestoreData[j].newInterval;
+                        let thisTest = `test: ${myRestoreData[j].data.test_id} environment: ${myRestoreData[j].data.environment_id} freq: ${myRestoreData[j].data.interval}`;
+                        let thisData = myRestoreData[j].data
+                        const createResults = await writeRunscopeSchedule(thisUrl, thisData)
+                        if (createResults.status == 201) {
+                            log.info(`Success! Scheduled on GCP: ${thisTest} | ${oldInterval} -> ${myRestoreData[j].data.interval}`);
+                        } else {
+                            log.warn(`There was a problem with ${thisTest}`);
+                        }
+                    } else {
+                        log.info(`Test not scheduled: ${checkTestUrl} | orig interval: ${myRestoreData[j].data.interval}`)
+                    }
+                } else {
+                    console.warn(`${checkTestUrl} does not exist in staging`);
+                }
+            } catch(err) {
+                console.warn(`Error: ${checkTestUrl} does not exist in staging`);
+                //console.debug(err);
             }
 
         }

@@ -23,12 +23,20 @@ Rename `mysettings.js` as `settings.js`
 - Copy the Personal Access Token from the created app and set the `apikey` in `settings.js`
 - NOTE: if you are creating a new access token this script will not run properly. This will presently only work with tokens created before 4/20/20. If you have a Runscope agent you may be able to use that token from the .conf file
 
+### Backup production tests
+
+- `node index.js backup YOUR_BUCKET_KEY`
+- this will copy your test schedules to a file. you should run this first to make sure you have no errors and have something to revert to "just in case"
+
 ### Copy all tests in a bucket to Staging
 
 - `node index.js copy YOUR_BUCKET_KEY`
 - by default, this will just copy the schedules to staging.
 - if you want to delete production schedules, set value on line 12 of index.js to `false` -- this will delete schedules for all tests in the bucket specified
+- if you want to ONLY delete production schedules (and not copy anything to staging), you can run `node index.js delete YOUR_BUCKET_KEY`
+- **IMPORTANT WARNING** `delete` command will delete production tests. to be safe run `copy` in 
 - a file named `restore-YOUR_BUCKET_KEY-DATESTAMP.json` will be created for use in case you need to copy schedules back to production (see below for use)
+- **IMPORTANT WARNING**: in the unlikely event you have the same test running at two different intervals with the same environment only one instance will be restored. You wil need to restore the other instance through the UI
 
 ### Resuming tests
 
