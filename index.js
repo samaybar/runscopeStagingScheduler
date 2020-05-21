@@ -180,7 +180,7 @@ async function copyTestSchedules() {
                         if (thisRestore.data.interval === '1m') {
                             thisRestore.newInterval = '5m'
                         } else if (thisRestore.data.interval === '5m') {
-                            thisRestore.newInterval = '5m'
+                            thisRestore.newInterval = '15m'
                         } else if (thisRestore.data.interval === '15m') {
                             thisRestore.newInterval = '15m'
                         } else if (thisRestore.data.interval === '30m') {
